@@ -2,6 +2,7 @@
 #include <set>
 #include <map>
 #include <cstdlib>
+#include <atomic>
 
 #include "telegram_handler.hpp"
 #include "user_handler.hpp"
@@ -12,6 +13,7 @@
 const int ALLOWED_START_ATTEMPTS = 8;
 const char* BOT_TOKEN;
 const char* PASSWORD;
+std::atomic<bool> shouldRestart = false;
 void init(TgBot::Bot &bot, std::vector<User> &users)
 {
     Time time;
@@ -231,6 +233,8 @@ int main() {
         EXIT_CODE code = cancelTableCheckin(user, time);
         if(code == CANCEL_SUCCESS || code == NOTHING_TO_CANCEL)
             setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
+        if(code == CANCEL_SUCCESS)
+            notifyManagerCancel(bot, users, user);
         logCode(user, code);
         feedbackCode(bot, user, code, time);
 
@@ -327,7 +331,7 @@ int main() {
         sendSafeMessage(bot, user.chatID, "♻️ Restarting bot...");
         std::cout << "[INFO] Bot is restarting by developer request\n";
 
-        std::exit(0); 
+        shouldRestart = true;
     });
 
     bot.getEvents().onAnyMessage([&bot, &awaitingNameInput, &awaitingPasswordInput, &awaitingRoleInput, &pendingNames,
@@ -467,6 +471,11 @@ int main() {
         bool backedUpToday = false;
         while (true)
         {
+            if (shouldRestart)
+            {
+                std::cout << "[INFO] Restarting...\n";
+                std::exit(0);
+            }
             Time currentTime;
 
             // Check for new day
