@@ -517,6 +517,10 @@ int main() {
     catch (TgBot::TgException &e)
     {
         printf("error: %s\n", e.what());
+    } catch (const std::exception &e) {
+        std::cerr << "[UNCAUGHT STD EXCEPTION] " << e.what() << "\n";
+    } catch (...) {
+        std::cerr << "[UNKNOWN ERROR] Something crashed the bot.\n";
     }
-    return 0;
+    return 1;
 }
