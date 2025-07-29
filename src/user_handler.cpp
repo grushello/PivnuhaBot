@@ -16,17 +16,18 @@ void loadUsers(std::vector<User> &users) {
     std::string line;
     while (std::getline(file, line)) {
         std::stringstream ss(line);
-        std::string name, chatIDstr, role;
+        std::string name, chatIDstr, role, area;
 
         // Split by semicolon
         std::getline(ss, name, ';');
         std::getline(ss, chatIDstr, ';');
         std::getline(ss, role, ';');
+        std::getline(ss, area, ';');
 
         // clean up quotes
         if (!chatIDstr.empty() && chatIDstr.front() == '"') chatIDstr.erase(0, 1);
         if (!chatIDstr.empty() && chatIDstr.back() == '"') chatIDstr.pop_back();
-        users.push_back(User{name, std::stoll(chatIDstr), userStringToRole(role)});
+        users.push_back(User{name, std::stoll(chatIDstr), userStringToRole(role), userStringToArea(area)});
     }
 
     file.close();
@@ -36,7 +37,7 @@ void saveUser(User &user)
 {
     std::ofstream myfile;
     myfile.open("users.csv", std::ios::app | std::ios::out);
-    myfile << user.name << ";" << '"' << user.chatID << '"' << ";" << userRoleToString(user.role) << "\n";
+    myfile << user.name << ";" << '"' << user.chatID << '"' << ";" << userRoleToString(user.role) << ";" << userAreaToString(user.area) << "\n";
     myfile.close();
 }
 

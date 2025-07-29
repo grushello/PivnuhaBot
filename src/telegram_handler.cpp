@@ -28,28 +28,32 @@ void setCommandsForUser(TgBot::Bot& bot, int64_t chatID, COMMAND_STATE state)
     switch (state)
     {
         case DEFAULT_COMMAND_STATE:
-            add("checkin", "Check-in");
-            add("customcheckin", "Check-in with set time");
+            add("checkin", "🕒Check-in");
+            add("customcheckin", "🕒Check-in with set time");
             break;
 
         case CHECKED_IN:
-            add("checkout", "Check-out");
-            add("customcheckout", "Check-out with set time");
+            add("checkout", "🕒Check-out");
+            add("customcheckout", "🕒Check-out with set time");
             add("cancel", "Cancel today's check-in/out");
             break;
 
         case CHECKED_OUT:
-            add("cancel", "Cancel today's check-in/out");
+            add("cancel", "❌Cancel today's check-in/out");
             break;
         case MANAGER_COMMAND_STATE:
-            add("currentshift", "See current shift");
-            add("table", "This month table");
-            add("lastmonthtable", "last month table");
+            add("currentshift", "👥 See current shift");
+            add("tablebar", "📅 Bar table for this month");
+            add("lastmonthbar", "📂 Bar table for last month");
+            add("tablekitchen", "📅 Kitchen table for this month");
+            add("lastmonthkitchen", "📂 Kitchen table for last month");
             break;
         case DEVELOPER_COMMAND_STATE:
-            add("currentshift", "See current shift");
-            add("table", "This month table");
-            add("lastmonthtable", "last month table");
+            add("currentshift", "👥 See current shift");
+            add("tablebar", "📅 Bar table for this month");
+            add("lastmonthbar", "📂 Bar table for last month");
+            add("tablekitchen", "📅 Kitchen table for this month");
+            add("lastmonthkitchen", "📂 Kitchen table for last month");
             add("restart", "restart the bot");
             break;
     }
@@ -64,8 +68,9 @@ void setCommandsForUser(TgBot::Bot& bot, int64_t chatID, COMMAND_STATE state)
     }
 }
 
-bool sendTableDoc(const TgBot::Bot& bot, const User& user, const std::string& filepath, const Time& time, bool isPreviousMonth)
+bool sendTableDoc(const TgBot::Bot& bot, const User& user, const std::string& filepath, const Time& time, bool isBarTable, bool isPreviousMonth)
 {
+    std::string typestr = isBarTable? "bar" : "kitchen";
     using TgBot::InputFile;
     std::string monthName = isPreviousMonth? Time::getPreviousMonthName(time.month) : Time::getMonthName(time.month);
     try
@@ -79,9 +84,9 @@ bool sendTableDoc(const TgBot::Bot& bot, const User& user, const std::string& fi
             user.chatID,             // who to send to
             doc,                           // the file itself
             "",                            // thumbnail (skip)
-            "Here’s the table for " + monthName + " 🎉" // optional caption
+            "Here’s the " + typestr + " table for " + monthName + " 🎉" // optional caption
         );                                 // the rest of the parameters keep their defaults
-        std::cout << "The table was succesfully sent to user: " << user.chatID << " - " << user.name << std::endl; 
+        std::cout << "The " << typestr << " table was succesfully sent to user: " << user.chatID << " - " << user.name << std::endl; 
         return true;
     }
     catch (const std::ios_base::failure& e) {
@@ -106,8 +111,10 @@ void listAvailableCommands(TgBot::Bot &bot, const User& user)
     {
         std::string message = "Here is the list of all avaiable commands!\n"
         "👥 /currentshift - see current shift\n"
-        "📅 /table - Table for current month\n"
-        "📂 /lastmonthtable - Table for last month\n";
+        "📅 /tablebar - Bar table for current month\n"
+        "📂 /lastmonthbar - Bar table for last month\n"
+        "📅 /tablekitchen - Kitchen table for current month\n"
+        "📂 /lastmonthkitchen - Kitchen table for last month\n";
         if(user.role == DEVELOPER)
         {    
             message += "/restart - restart the bot\n";
@@ -116,25 +123,37 @@ void listAvailableCommands(TgBot::Bot &bot, const User& user)
     }
     else
     {
-        sendSafeMessage(bot, user.chatID, "🤖 Here's what I can help you with:\n"
-            "📅 /table - Table for current month\n"
-            "📂 /lastmonthtable - Table for last month\n"
-            "🕒/checkin - Check-in to work\n"
+        std::string tableCommands = user.area == BAR?
+            "📅 /tablebar - Table for current month\n"
+            "📂 /lastmonthbar - Table for last month\n"
+            :
+            "📅 /tablekitchen - Table for current month\n"
+            "📂 /lastmonthkitchen - Table for last month\n";
+
+        sendSafeMessage(bot, user.chatID, "🤖 Here's what I can help you with:\n" + tableCommands
+            + "🕒/checkin - Check-in to work\n"
             "🕒/customcheckin - Check-in for set time\n"
             "🕒/checkout - Check-out from work\n"
             "🕒/customcheckout - Check-out for set time\n"
             "❌/cancel - Cancel today's check-in/check-out\n");
     }
     }
-void listCurrentShift(TgBot::Bot& bot, const std::vector<User>& shift, const User& user)
+void listCurrentShift(TgBot::Bot& bot, const std::vector<User>& barShift, const std::vector<User>& kitchenShift, const User& user)
 {
     std::string message = "👥 Here is the current shift:\n";
     
-    if(shift.size() == 0)
-        message = "🌙 No one's working right now!";
+    if(barShift.size() != 0)
+        message += "Bar:\n";
+    for(int i = 0; i < barShift.size(); ++i)
+        message += "\t" + barShift[i].name + '\n';
     
-    for(int i = 0; i < shift.size(); ++i)
-        message += shift[i].name + '\n';
+    if(kitchenShift.size() != 0)
+        message += "Kitchen:\n";
+    for(int i = 0; i < kitchenShift.size(); ++i)
+        message += "\t" + kitchenShift[i].name + '\n';
+
+    if(barShift.size() == 0 && kitchenShift.size() == 0)
+        message = "🌙 No one's working right now!";
     sendSafeMessage(bot, user.chatID, message);
 }
 void notifyManagerCheckin(TgBot::Bot& bot, const std::vector<User>& users, const User& user, const Time& time)

@@ -3,6 +3,12 @@
 #include <xlnt/xlnt.hpp>
 #include <filesystem>
 
+TABLE_TYPE getCorrespondingTableType(const User& user)
+{
+    if(user.area == BAR)
+        return BAR_TABLE;
+    return KITCHEN_TABLE;
+}
 void writeTimeToCell(xlnt::cell &cell, const Time &t)
 {
     double excelTime = (t.hour * 3600 + t.minute * 60) / 86400.0;
@@ -51,10 +57,10 @@ Time readCellTime(const xlnt::cell &cell)
 }
 
 int getDayRow(int day) { return day+2; }
-int getNameColumn(const std::string& name, const Time& time)
+int getNameColumn(const std::string& name, const Time& time, TABLE_TYPE type)
 {
     xlnt::workbook wb;
-    wb.load(getTableFilename(time));
+    wb.load(getTableFilename(time, type));
     auto ws = wb.active_sheet();
     
     int column = 2;
@@ -66,9 +72,9 @@ int getNameColumn(const std::string& name, const Time& time)
     }
     return -1;
 }
-void createEmptyTable(const std::vector<User>& users, const Time& time ,TABLE_CREATE_OPTION option)
+void createEmptyTable(const std::vector<User>& users, const Time& time ,TABLE_TYPE type, TABLE_CREATE_OPTION option)
 {
-    if(tableExists(time) && option == NON_REWRITE)
+    if(tableExists(time, type) && option == NON_REWRITE)
     {
         std::cout << "Table for the month already exists, rewrite attempt dismissed\n";
         return;
@@ -77,18 +83,19 @@ void createEmptyTable(const std::vector<User>& users, const Time& time ,TABLE_CR
     xlnt::workbook wb;
     xlnt::worksheet ws = wb.active_sheet();
 
-    ws.title(getTableName(time));
-    wb.save(getTableFilename(time)); 
+    ws.title(getTableName(time, type));
+    wb.save(getTableFilename(time, type)); 
     
     for (int i = 0; i < users.size(); ++i)
     {
-        addUserToTable(users[i], time);
+        if(users[i].role == EMPLOYEE && getCorrespondingTableType(users[i]) == type)
+            addUserToTable(users[i], type, time);
     }
 
-    wb.load(getTableFilename(time));
+    wb.load(getTableFilename(time, type));
     ws = wb.active_sheet();
 
-    ws.title(getTableName(time));
+    ws.title(getTableName(time, type));
 
     // Set "Date" in A1/A2
     ws.cell("A1").value("");
@@ -108,17 +115,17 @@ void createEmptyTable(const std::vector<User>& users, const Time& time ,TABLE_CR
 
     try
     {
-        wb.save(getTableFilename(time));
+        wb.save(getTableFilename(time, type));
     }
     catch (const xlnt::exception& e)
     {
         std::cerr << e.what() << std::endl;
     }
 }
-void addUserToTable(const User& user, const Time& time)
+void addUserToTable(const User& user, TABLE_TYPE type, const Time& time)
 {
     xlnt::workbook wb;
-    wb.load(getTableFilename(time));
+    wb.load(getTableFilename(time, type));
     xlnt::worksheet ws = wb.active_sheet();
 
     xlnt::alignment centered;
@@ -151,24 +158,27 @@ void addUserToTable(const User& user, const Time& time)
     ws.cell(col + 2, totalRow).formula("=SUM(" + range + ")");
     try
     {
-        wb.save(getTableFilename(time));
+        wb.save(getTableFilename(time, type));
     }
     catch (const xlnt::exception& e)
     {
         std::cerr << e.what() << std::endl;
     }
 }
-std::string getTableFilename(const Time& time)
+std::string getTableFilename(const Time& time, TABLE_TYPE type)
 {
-    return "workingHours" + time.mmyyyy() + ".xlsx";
+    std::string typestr = type == BAR_TABLE? "Bar" : "Kitchen";
+    return "workingHours" + typestr + time.mmyyyy() + ".xlsx";
 }
 
-std::string getTableName(const Time& time)
+std::string getTableName(const Time& time, TABLE_TYPE type)
 {
-    return "workingHours" + time.mmyyyy();
+    std::string typestr = type == BAR_TABLE? "Bar" : "Kitchen";
+    return "workingHours" + typestr + time.mmyyyy();
 }
-std::string getLastMonthTableFilename(const Time& time)
+std::string getLastMonthTableFilename(const Time& time, TABLE_TYPE type)
 {
+    std::string typestr = type == BAR_TABLE? "Bar" : "Kitchen";
     int prevMonth = time.month - 1;
     int year = time.year;
 
@@ -179,7 +189,7 @@ std::string getLastMonthTableFilename(const Time& time)
 
     // Format month to always have two digits (e.g., "01", "02", ..., "12")
     std::ostringstream oss;
-    oss << "workingHours" << std::setw(2) << std::setfill('0') << prevMonth << '.' << year << ".xlsx";
+    oss << "workingHours"  << typestr << std::setw(2) << std::setfill('0') << prevMonth << '.' << year << ".xlsx";
 
     return oss.str();
 }
@@ -187,10 +197,11 @@ std::string getLastMonthTableFilename(const Time& time)
 EXIT_CODE tableCheckin(const User& user, const Time& time)
 {
     xlnt::workbook wb;
-    wb.load(getTableFilename(time));
+    TABLE_TYPE type = user.area == BAR? BAR_TABLE : KITCHEN_TABLE;
+    wb.load(getTableFilename(time, type));
     xlnt::worksheet ws = wb.active_sheet();
 
-    int column = getNameColumn(user.name, time);
+    int column = getNameColumn(user.name, time, type);
     if (column == -1)
     {
         return EXIT_CODE::USER_NOT_FOUND;
@@ -207,7 +218,7 @@ EXIT_CODE tableCheckin(const User& user, const Time& time)
 
     try
     {
-        wb.save(getTableFilename(time));
+        wb.save(getTableFilename(time, type));
         return EXIT_CODE::CHECKIN_SUCCESS;
     }
     catch (const xlnt::exception& e)
@@ -219,10 +230,11 @@ EXIT_CODE tableCheckin(const User& user, const Time& time)
 std::pair<EXIT_CODE, Time> tableCheckout(const User& user, const Time& time)
 {
     xlnt::workbook wb;
-    wb.load(getTableFilename(time));
+    TABLE_TYPE type = user.area == BAR? BAR_TABLE : KITCHEN_TABLE;
+    wb.load(getTableFilename(time, type));
     xlnt::worksheet ws = wb.active_sheet();
 
-    int column = getNameColumn(user.name, time);
+    int column = getNameColumn(user.name, time, type);
     if (column++ == -1)
     {
         return {EXIT_CODE::USER_NOT_FOUND, Time()};
@@ -257,7 +269,7 @@ std::pair<EXIT_CODE, Time> tableCheckout(const User& user, const Time& time)
 
     try
     {
-        wb.save(getTableFilename(time));
+        wb.save(getTableFilename(time, type));
         return {EXIT_CODE::CHECKOUT_SUCCESS, inTime};
     }
     catch (const xlnt::exception& e)
@@ -266,18 +278,19 @@ std::pair<EXIT_CODE, Time> tableCheckout(const User& user, const Time& time)
     }
     return {EXIT_CODE::DEFAULT_ERROR, Time()};
 }
-bool tableExists(const Time& time)
+bool tableExists(const Time& time, TABLE_TYPE type)
 {
-    std::string filename = getTableFilename(time);
+    std::string filename = getTableFilename(time, type);
     return std::filesystem::exists(filename);
 }
 EXIT_CODE cancelTableCheckin(const User& user, const Time& time)
 {
     xlnt::workbook wb;
-    wb.load(getTableFilename(time));
+    TABLE_TYPE type = user.area == BAR? BAR_TABLE : KITCHEN_TABLE;
+    wb.load(getTableFilename(time, type));
     xlnt::worksheet ws = wb.active_sheet();
 
-    int column = getNameColumn(user.name, time);
+    int column = getNameColumn(user.name, time, type);
     if (column++ == -1)
     {
         return EXIT_CODE::USER_NOT_FOUND;
@@ -294,7 +307,7 @@ EXIT_CODE cancelTableCheckin(const User& user, const Time& time)
 
     try
     {
-        wb.save(getTableFilename(time));
+        wb.save(getTableFilename(time, type));
         return EXIT_CODE::CANCEL_SUCCESS;
     }
     catch (const xlnt::exception& e)

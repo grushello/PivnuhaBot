@@ -13,3 +13,15 @@ USER_ROLE userStringToRole(std::string role)
     if(role == "developer") return DEVELOPER;
     return USER_ROLE::DEFAULT_ROLE;
 }
+std::string userAreaToString(WORKING_AREA area)
+{
+    if(area == BAR) return "bar";
+    if(area == KITCHEN) return "kitchen";
+    return "default";
+}
+WORKING_AREA userStringToArea(std::string area)
+{
+    if(area == "bar") return BAR;
+    if(area == "kitchen") return KITCHEN;
+    return WORKING_AREA::DEFAULT_AREA;
+}

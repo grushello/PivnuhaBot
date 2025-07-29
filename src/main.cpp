@@ -14,15 +14,81 @@ const int ALLOWED_START_ATTEMPTS = 8;
 const char* BOT_TOKEN;
 const char* PASSWORD;
 std::atomic<bool> shouldRestart = false;
+
+void saveLastProcessedDay(const std::string& ddmmyyyy)
+{
+    try
+    {
+        std::ofstream outFile("lastProcessedDay.txt");
+        if (outFile)
+        {
+            outFile << ddmmyyyy;
+        }
+    }
+    catch(...)
+    {
+        std::cout << "couldn't write last processed day to a file\n";
+    }
+}
+std::string readLastProcessedDay()
+{
+    Time time;
+    try
+    {
+        std::ifstream inFile("lastProcessedDay.txt");
+        std::string date;
+
+        if (inFile)
+        {
+            std::getline(inFile, date);
+            return date;
+        }
+        return time.ddmmyyyy();
+    }
+    catch (...)
+    {
+        return time.ddmmyyyy();
+    }
+}
+std::string readLastProcessedMonth()
+{
+    Time time;
+    try
+    {
+        std::ifstream inFile("lastProcessedDay.txt");
+        std::string date;
+
+        if (inFile)
+        {
+            std::getline(inFile, date);
+            if (date.size() >= 3)
+                return date.substr(3); // skip "dd."
+        }
+        return time.ddmmyyyy().substr(3);
+    }
+    catch (...)
+    {
+        return time.ddmmyyyy().substr(3);
+    }
+}
 void init(TgBot::Bot &bot, std::vector<User> &users)
 {
     Time time;
     loadUsers(users);
     std::cout << "The bot started. There are " << users.size() << " users\n";
-    if(!tableExists(time))
+    if(!tableExists(time, BAR_TABLE))
     {
-        std::cout << "There was no table found on initialization\nCreating an empty new one\n";
-        createEmptyTable(users, time, NON_REWRITE);
+        std::cout << "There was no bar table found on initialization\nCreating an empty new one\n";
+        createEmptyTable(users, time, BAR_TABLE, NON_REWRITE);
+        for(int i = 0; i < users.size(); ++i)
+        {
+            setCommandsForUser(bot, users[i].chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
+        }
+    }
+    if(!tableExists(time, KITCHEN_TABLE))
+    {
+        std::cout << "There was no kitchen table found on initialization\nCreating an empty new one\n";
+        createEmptyTable(users, time, KITCHEN_TABLE, NON_REWRITE);
         for(int i = 0; i < users.size(); ++i)
         {
             setCommandsForUser(bot, users[i].chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
@@ -47,10 +113,12 @@ int main() {
     TgBot::Bot bot(BOT_TOKEN);
 
     std::vector<User> users;
-    std::vector<User> currentShift;
+    std::vector<User> barShift;
+    std::vector<User> kitchenShift;
     std::set<int64_t> awaitingNameInput;
     std::set<int64_t> awaitingPasswordInput;
     std::set<int64_t> awaitingRoleInput;
+    std::set<int64_t> awaitingAreaInput;
     std::set<int64_t> awaitingCustomCheckinInput;
     std::set<int64_t> awaitingCustomCheckoutInput;
     std::map<int64_t, std::string> pendingNames;
@@ -87,7 +155,7 @@ int main() {
             
         awaitingPasswordInput.insert(message->chat->id);
     });
-    bot.getEvents().onCommand("checkin", [&bot, &users, &blockedUsers, &currentShift](TgBot::Message::Ptr message) {
+    bot.getEvents().onCommand("checkin", [&bot, &users, &blockedUsers, &barShift, &kitchenShift](TgBot::Message::Ptr message) {
         if(blockedUsers.count(message->chat->id))
             return;
 
@@ -95,7 +163,7 @@ int main() {
         Time time;
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
@@ -113,7 +181,10 @@ int main() {
         if(code == CHECKIN_SUCCESS)
         {
             setCommandsForUser(bot, user.chatID, COMMAND_STATE::CHECKED_IN);
-            currentShift.push_back(user);
+            if(user.area == BAR)
+                barShift.push_back(user);
+            else 
+                kitchenShift.push_back(user);
             notifyManagerCheckin(bot, users, user, time);
         }
         logCode(user, code);
@@ -127,7 +198,7 @@ int main() {
         Time time;
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
@@ -144,7 +215,7 @@ int main() {
         sendSafeMessage(bot, user.chatID, "🕐 Please, enter your check-in time");
         awaitingCustomCheckinInput.insert(user.chatID);
     });
-    bot.getEvents().onCommand("checkout", [&bot, &users, &blockedUsers, &currentShift](TgBot::Message::Ptr message)
+    bot.getEvents().onCommand("checkout", [&bot, &users, &blockedUsers, &barShift, &kitchenShift](TgBot::Message::Ptr message)
     {
         if(blockedUsers.count(message->chat->id))
             return;
@@ -153,7 +224,7 @@ int main() {
 
         if (user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, currentTime);
             return;
@@ -172,10 +243,16 @@ int main() {
         if (code == CHECKOUT_SUCCESS) 
         {
             setCommandsForUser(bot, user.chatID, COMMAND_STATE::CHECKED_OUT);
-            auto it = std::remove_if(currentShift.begin(), currentShift.end(), [&](const User& u) {
+            auto it = std::remove_if(barShift.begin(), barShift.end(), [&](const User& u) {
                 return u.chatID == user.chatID;
             });
-            currentShift.erase(it, currentShift.end());
+            barShift.erase(it, barShift.end());
+            
+            it = std::remove_if(kitchenShift.begin(), kitchenShift.end(), [&](const User& u) {
+                return u.chatID == user.chatID;
+            });
+            kitchenShift.erase(it, kitchenShift.end());
+
             notifyManagerCheckout(bot, users, user, currentTime);
         }
 
@@ -191,7 +268,7 @@ int main() {
         Time time;
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
@@ -216,7 +293,7 @@ int main() {
         Time time;
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
@@ -239,7 +316,7 @@ int main() {
         feedbackCode(bot, user, code, time);
 
     });
-    bot.getEvents().onCommand("table", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
+    bot.getEvents().onCommand("tablebar", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
         if(blockedUsers.count(message->chat->id))
             return;
 
@@ -247,16 +324,16 @@ int main() {
         User user = findUser(users, message->chat->id);
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
-        std::cout << "/table request was sent from user: " << user.chatID
+        std::cout << "/tablebar request was sent from user: " << user.chatID
         << " - " << user.name << "\nExecuting request...\n";
-        sendTableDoc(bot, user, getTableFilename(time), time, false);
+        sendTableDoc(bot, user, getTableFilename(time, BAR_TABLE), time, true, false);
     });
-    bot.getEvents().onCommand("lastmonthtable", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
+    bot.getEvents().onCommand("tablekitchen", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
         if(blockedUsers.count(message->chat->id))
             return;
 
@@ -264,14 +341,48 @@ int main() {
         User user = findUser(users, message->chat->id);
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
-        std::cout << "/lastmonthtable request was sent from user: " << user.chatID
+        std::cout << "/tablekitchen request was sent from user: " << user.chatID
         << " - " << user.name << "\nExecuting request...\n";
-        sendTableDoc(bot, user, getLastMonthTableFilename(time), time, true);
+        sendTableDoc(bot, user, getTableFilename(time, KITCHEN_TABLE), time, false, false);
+    });
+    bot.getEvents().onCommand("lastmonthbar", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
+        if(blockedUsers.count(message->chat->id))
+            return;
+
+        Time time;
+        User user = findUser(users, message->chat->id);
+        if(user.chatID == 0)
+        {
+            user = User();
+            logCode(user, USER_NOT_FOUND);
+            feedbackCode(bot, user, USER_NOT_FOUND, time);
+            return;
+        }
+        std::cout << "/lastmonthbar request was sent from user: " << user.chatID
+        << " - " << user.name << "\nExecuting request...\n";
+        sendTableDoc(bot, user, getLastMonthTableFilename(time, BAR_TABLE), time, true, true);
+    });
+    bot.getEvents().onCommand("lastmonthkitchen", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
+        if(blockedUsers.count(message->chat->id))
+            return;
+
+        Time time;
+        User user = findUser(users, message->chat->id);
+        if(user.chatID == 0)
+        {
+            user = User();
+            logCode(user, USER_NOT_FOUND);
+            feedbackCode(bot, user, USER_NOT_FOUND, time);
+            return;
+        }
+        std::cout << "/lastmonthkitchen request was sent from user: " << user.chatID
+        << " - " << user.name << "\nExecuting request...\n";
+        sendTableDoc(bot, user, getLastMonthTableFilename(time, KITCHEN_TABLE), time, false, true);
     });
     bot.getEvents().onCommand("help", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
         if(blockedUsers.count(message->chat->id))
@@ -281,7 +392,7 @@ int main() {
         User user = findUser(users, message->chat->id);
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
@@ -290,7 +401,7 @@ int main() {
         << " - " << user.name << "\nExecuting request...\n";
         listAvailableCommands(bot, user);
     });
-    bot.getEvents().onCommand("currentshift", [&bot, &users, &blockedUsers, &currentShift](TgBot::Message::Ptr message) {
+    bot.getEvents().onCommand("currentshift", [&bot, &users, &blockedUsers, &barShift, &kitchenShift](TgBot::Message::Ptr message) {
         if(blockedUsers.count(message->chat->id))
             return;
 
@@ -298,14 +409,14 @@ int main() {
         User user = findUser(users, message->chat->id);
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         std::cout << "/currentshift request was sent from user: " << user.chatID
         << " - " << user.name << "\nExecuting request...\n";
-        listCurrentShift(bot, currentShift, user);
+        listCurrentShift(bot, barShift, kitchenShift, user);
     });
     bot.getEvents().onCommand("restart", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message){
         if(blockedUsers.count(message->chat->id))
@@ -314,7 +425,7 @@ int main() {
         User user = findUser(users, message->chat->id);
         if(user.chatID == 0)
         {
-            user = User("NON_REGISTERED_USER", message->chat->id, USER_ROLE::DEFAULT_ROLE);
+            user = User();
             logCode(user, USER_NOT_FOUND);
             feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
@@ -334,8 +445,8 @@ int main() {
         shouldRestart = true;
     });
 
-    bot.getEvents().onAnyMessage([&bot, &awaitingNameInput, &awaitingPasswordInput, &awaitingRoleInput, &pendingNames,
-        &awaitingCustomCheckinInput, &awaitingCustomCheckoutInput, &users, &blockedUsers, &currentShift](TgBot::Message::Ptr message)
+    bot.getEvents().onAnyMessage([&bot, &awaitingNameInput, &awaitingPasswordInput, &awaitingRoleInput, &awaitingAreaInput, &pendingNames,
+        &awaitingCustomCheckinInput, &awaitingCustomCheckoutInput, &users, &blockedUsers, &barShift, &kitchenShift](TgBot::Message::Ptr message)
     {
         if(blockedUsers.count(message->chat->id))
             return;
@@ -378,7 +489,7 @@ int main() {
             pendingNames[message->chat->id] = message->text;
             awaitingNameInput.erase(message->chat->id);
             awaitingRoleInput.insert(message->chat->id);
-            sendSafeMessage(bot, message->chat->id, "🙌 Almost done! Now choose your role: send 'manager' or 'employee'");
+            sendSafeMessage(bot, message->chat->id, "Now choose your role: send 'manager' or 'employee'");
         }
         else if(awaitingRoleInput.count(message->from->id)) {
             std::string text = message->text;
@@ -391,17 +502,48 @@ int main() {
             }
             USER_ROLE role = (text == "manager") ? USER_ROLE::MANAGER : USER_ROLE::EMPLOYEE;
 
-            User user(pendingNames[message->from->id], message->from->id, role);
+            if(role == USER_ROLE::EMPLOYEE)
+            {
+                sendSafeMessage(bot, message->chat->id, "🙌 Almost done! Now choose your working area: send 'bar' or 'kitchen'");
+                awaitingRoleInput.erase(message->chat->id);
+                awaitingAreaInput.insert(message->chat->id);
+                return;
+            }
+            User user(pendingNames[message->from->id], message->from->id, role, DEFAULT_AREA);
 
             saveUser(user);
-            if(user.role == EMPLOYEE)
-                addUserToTable(user, Time());
             setCommandsForUser(bot, message->chat->id, user.role == EMPLOYEE? DEFAULT_COMMAND_STATE 
                 : user.role == DEVELOPER? DEVELOPER_COMMAND_STATE 
                 : MANAGER_COMMAND_STATE);
             sendSafeMessage(bot, message->chat->id, "🎉 Registration complete! Thanks, " + user.name + "! You are registered as a " + text + ".");
             std::cout << "User " << user.name << " registered with role: " << text << "\n";
             awaitingRoleInput.erase(message->chat->id);
+            users.push_back(user);
+        }
+        else if(awaitingAreaInput.count(message->from->id))
+        {
+            std::string text = message->text;
+            std::transform(text.begin(), text.end(), text.begin(), ::tolower);
+            if(text != "bar" && text != "kitchen") 
+            {
+                sendSafeMessage(bot, message->chat->id, "⚠️Invalid area! Please /start again and type either 'kitchen' or 'bar' at this stage.");
+                awaitingAreaInput.erase(message->from->id);
+                return;
+            }
+            WORKING_AREA area = (text == "bar") ? WORKING_AREA::BAR : WORKING_AREA::KITCHEN;
+            User user(pendingNames[message->from->id], message->from->id, EMPLOYEE, area);
+
+            saveUser(user);
+            if(area == BAR)
+                addUserToTable(user, BAR_TABLE, Time());
+            else
+                addUserToTable(user, KITCHEN_TABLE, Time());
+
+            setCommandsForUser(bot, message->chat->id, DEFAULT_COMMAND_STATE);
+            sendSafeMessage(bot, message->chat->id, "🎉 Registration complete! Thanks, " + user.name + "! You are registered as an " + userRoleToString(user.role) + ".");
+            std::cout << "User " << user.name << " registered with role: " << text << "\n";
+            awaitingAreaInput.erase(message->chat->id);
+            pendingNames.erase(message->chat->id);
             users.push_back(user);
         }
         else if(awaitingCustomCheckinInput.count(message->from->id))
@@ -419,7 +561,10 @@ int main() {
             if (code == CHECKIN_SUCCESS)
             {
                 setCommandsForUser(bot, user.chatID, COMMAND_STATE::CHECKED_IN);
-                currentShift.push_back(user);
+                if(user.area == BAR)
+                    barShift.push_back(user);
+                else 
+                    kitchenShift.push_back(user);
                 notifyManagerCheckin(bot, users, user, time);
             }
             awaitingCustomCheckinInput.erase(message->from->id);
@@ -447,10 +592,17 @@ int main() {
             if (code == CHECKOUT_SUCCESS) 
             {
                 setCommandsForUser(bot, user.chatID, COMMAND_STATE::CHECKED_OUT);
-                auto it = std::remove_if(currentShift.begin(), currentShift.end(), [&](const User& u) {
+
+                auto it = std::remove_if(barShift.begin(), barShift.end(), [&](const User& u) {
                     return u.chatID == user.chatID;
                 });
-                currentShift.erase(it, currentShift.end());
+                barShift.erase(it, barShift.end());
+                
+                it = std::remove_if(kitchenShift.begin(), kitchenShift.end(), [&](const User& u) {
+                    return u.chatID == user.chatID;
+                });
+                kitchenShift.erase(it, kitchenShift.end());
+
                 notifyManagerCheckout(bot, users, user, time);
             }
             awaitingCustomCheckoutInput.erase(message->chat->id);
@@ -465,8 +617,9 @@ int main() {
         printf("Bot username: %s\n", bot.getApi().getMe()->username.c_str());
         TgBot::TgLongPoll longPoll(bot);
 
-        std::string lastProcessedDay = Time().ddmmyyyy();
-        std::string lastProcessedMonth = Time().mmyyyy();
+        int lastProcessedHour = Time().hour - 1;
+        std::string lastProcessedDay = readLastProcessedDay();
+        std::string lastProcessedMonth = readLastProcessedMonth();
         
         bool backedUpToday = false;
         while (true)
@@ -477,8 +630,6 @@ int main() {
                 std::exit(0);
             }
             Time currentTime;
-
-            // Check for new day
             if(currentTime.hour == 4 && !backedUpToday)
             {
                 for(int i = 0; i < users.size(); ++i)
@@ -486,7 +637,8 @@ int main() {
                     if(users[i].role == DEVELOPER)
                     {
                         sendSafeMessage(bot, users[i].chatID, "Table backup for " + currentTime.ddmmyyyy());
-                        sendTableDoc(bot, users[i], getTableFilename(currentTime), currentTime, false);
+                        sendTableDoc(bot, users[i], getTableFilename(currentTime, BAR_TABLE), currentTime, true, false);
+                        sendTableDoc(bot, users[i], getTableFilename(currentTime, KITCHEN_TABLE), currentTime, false, false);
                     }
                 }
                 backedUpToday = true;
@@ -498,7 +650,12 @@ int main() {
                 std::cout << "[INFO] New day detected: " << lastProcessedDay << " — resetting command states.\n";
                 for (User &user : users)
                 {
-                    setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
+                    if(user.role == MANAGER)
+                        setCommandsForUser(bot, user.chatID, COMMAND_STATE::MANAGER_COMMAND_STATE);
+                    else if(user.role == DEVELOPER)
+                        setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEVELOPER_COMMAND_STATE);
+                    else if(user.role == EMPLOYEE)
+                        setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
                 }
             }
 
@@ -507,9 +664,15 @@ int main() {
             {
                 lastProcessedMonth = currentTime.mmyyyy();
                 std::cout << "[INFO] New month detected: " << lastProcessedMonth << " — creating new table.\n";
-                createEmptyTable(users, currentTime, NON_REWRITE);
+                createEmptyTable(users, currentTime, BAR_TABLE, NON_REWRITE);
+                createEmptyTable(users, currentTime, KITCHEN_TABLE, NON_REWRITE);
             }
-
+            
+            if(currentTime.hour != lastProcessedHour)
+            {
+                lastProcessedHour = currentTime.hour;
+                saveLastProcessedDay(currentTime.ddmmyyyy());
+            }
             printf("Long poll started\n");
             longPoll.start();
         }
