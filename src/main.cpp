@@ -165,7 +165,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         if(user.role != USER_ROLE::EMPLOYEE)
@@ -200,7 +199,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         if(user.role != USER_ROLE::EMPLOYEE)
@@ -270,7 +268,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         if(user.role != USER_ROLE::EMPLOYEE)
@@ -295,7 +292,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         if(user.role != USER_ROLE::EMPLOYEE)
@@ -326,7 +322,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         std::cout << "/tablebar request was sent from user: " << user.chatID
@@ -343,7 +338,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         std::cout << "/tablekitchen request was sent from user: " << user.chatID
@@ -360,7 +354,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         std::cout << "/lastmonthbar request was sent from user: " << user.chatID
@@ -377,7 +370,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         std::cout << "/lastmonthkitchen request was sent from user: " << user.chatID
@@ -394,7 +386,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         std::cout << "/help request was sent from user: " << user.chatID
@@ -411,7 +402,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         std::cout << "/currentshift request was sent from user: " << user.chatID
@@ -427,7 +417,6 @@ int main() {
         {
             user = User();
             logCode(user, USER_NOT_FOUND);
-            feedbackCode(bot, user, USER_NOT_FOUND, time);
             return;
         }
         if (user.role != USER_ROLE::DEVELOPER) 

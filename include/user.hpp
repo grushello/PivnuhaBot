@@ -22,7 +22,7 @@ public:
     User() {}
     User(std::string givenName, int64_t givenChatID, USER_ROLE givenRole, WORKING_AREA givenArea) : name(givenName), chatID(givenChatID), role(givenRole), area(givenArea)    {}
     bool operator == (const User &other) { return other.chatID == chatID; }
-    std::string name = "";
+    std::string name = "NONE_REGISTERED";
     USER_ROLE role = EMPLOYEE;
     int64_t chatID = 0;
     WORKING_AREA area = DEFAULT_AREA;
