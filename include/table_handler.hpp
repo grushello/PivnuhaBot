@@ -18,3 +18,4 @@ std::string getTableName(const Time& time, TABLE_TYPE type);
 bool tableExists(const Time& time, TABLE_TYPE type);
 void writeTimeToCell(xlnt::cell &cell, const Time &t);
 Time readCellTime(const xlnt::cell &cell);
+bool employeeIsAtShift(const User& user, const Time& time);

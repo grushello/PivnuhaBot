@@ -12,7 +12,7 @@ void sendSafeMessage(TgBot::Bot &bot, int64_t chatID, const std::string& message
     }
 }
 
-void setCommandsForUser(TgBot::Bot& bot, int64_t chatID, COMMAND_STATE state)
+void setCommandsForUser(const TgBot::Bot& bot, int64_t chatID, COMMAND_STATE state)
 {
     std::vector<TgBot::BotCommand::Ptr> commands;
 
@@ -67,7 +67,20 @@ void setCommandsForUser(TgBot::Bot& bot, int64_t chatID, COMMAND_STATE state)
         std::cerr << "Telegram API error while setting commands: " << e.what() << std::endl;
     }
 }
-
+void resetCommandsForAllUsers(const TgBot::Bot& bot, const std::vector<User>& users)
+{
+    for (const User &user : users)
+    {
+        if (user.role == MANAGER)
+            setCommandsForUser(bot, user.chatID, COMMAND_STATE::MANAGER_COMMAND_STATE);
+        else if (user.role == DEVELOPER)
+            setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEVELOPER_COMMAND_STATE);
+        else if (user.role == EMPLOYEE)
+        {
+            setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
+        }
+    }
+}
 bool sendTableDoc(const TgBot::Bot& bot, const User& user, const std::string& filepath, const Time& time, bool isBarTable, bool isPreviousMonth)
 {
     std::string typestr = isBarTable? "bar" : "kitchen";

@@ -316,3 +316,25 @@ EXIT_CODE cancelTableCheckin(const User& user, const Time& time)
     }
     return EXIT_CODE::DEFAULT_ERROR;
 }
+bool employeeIsAtShift(const User& user, const Time& time)
+{
+    TABLE_TYPE tableType = user.area == BAR? BAR_TABLE : KITCHEN_TABLE;
+    if(!tableExists(time, tableType))
+    {
+        return false;
+    }
+    int column = getNameColumn(user.name, time, tableType);
+    if (column == -1) return false;
+
+    xlnt::workbook wb;
+    wb.load(getTableFilename(time, tableType));
+    auto ws = wb.active_sheet();
+    
+    int row = getDayRow(time.day);
+    
+    if(ws.cell(column, row).has_value() && !ws.cell(column + 1, row).has_value())
+    {
+        return true;
+    }
+    return false;
+}

@@ -59,3 +59,24 @@ bool nameIsRegistered(const std::vector<User>& users, const std::string& name)
     }
     return false;
 }
+void removeUserFromShift(const User &user, std::vector<User> &shift)
+{
+    auto it = std::remove_if(shift.begin(), shift.end(), [&](const User& u) 
+    {
+        return u.chatID == user.chatID;
+     });
+    shift.erase(it, shift.end());
+}
+void setShift(const std::vector<User> users, std::vector<User>& barShift, std::vector<User> &kitchenShift, const Time& time)
+{
+    for(const User& user : users)
+    {
+        if(employeeIsAtShift(user, time))
+        {
+            if(user.area == BAR)
+                barShift.push_back(user);
+            else if(user.area == KITCHEN)
+                kitchenShift.push_back(user);
+        }
+    }
+}

@@ -71,7 +71,7 @@ std::string readLastProcessedMonth()
         return time.ddmmyyyy().substr(3);
     }
 }
-void init(TgBot::Bot &bot, std::vector<User> &users)
+void init(TgBot::Bot &bot, std::vector<User> &users, std::vector<User>& barShift, std::vector<User>& kitchenShift)
 {
     Time time;
     loadUsers(users);
@@ -80,24 +80,17 @@ void init(TgBot::Bot &bot, std::vector<User> &users)
     {
         std::cout << "There was no bar table found on initialization\nCreating an empty new one\n";
         createEmptyTable(users, time, BAR_TABLE, NON_REWRITE);
-        for(int i = 0; i < users.size(); ++i)
-        {
-            setCommandsForUser(bot, users[i].chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
-        }
     }
     if(!tableExists(time, KITCHEN_TABLE))
     {
         std::cout << "There was no kitchen table found on initialization\nCreating an empty new one\n";
         createEmptyTable(users, time, KITCHEN_TABLE, NON_REWRITE);
-        for(int i = 0; i < users.size(); ++i)
-        {
-            setCommandsForUser(bot, users[i].chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
-        }
     }
+    setShift(users, barShift, kitchenShift, time);
 }
 
 int main() {
-    BOT_TOKEN = std::getenv("BOT_TOKEN");
+    BOT_TOKEN = std::getenv("BOT_TOKEN");    
     PASSWORD = std::getenv("BOT_PASSWORD");
      if (BOT_TOKEN) {
         std::cout << "BOT_TOKEN: is set" << std::endl;
@@ -126,7 +119,7 @@ int main() {
     std::map<int64_t, int> startAttempts;
     std::set<int64_t> blockedUsers;
 
-    init(bot, users);
+    init(bot, users, barShift, kitchenShift);
     bot.getEvents().onCommand("start", [&bot, &users, &awaitingPasswordInput, &startAttempts, &blockedUsers](TgBot::Message::Ptr message) {
         if(blockedUsers.count(message->chat->id))
             return;
@@ -241,15 +234,8 @@ int main() {
         if (code == CHECKOUT_SUCCESS) 
         {
             setCommandsForUser(bot, user.chatID, COMMAND_STATE::CHECKED_OUT);
-            auto it = std::remove_if(barShift.begin(), barShift.end(), [&](const User& u) {
-                return u.chatID == user.chatID;
-            });
-            barShift.erase(it, barShift.end());
-            
-            it = std::remove_if(kitchenShift.begin(), kitchenShift.end(), [&](const User& u) {
-                return u.chatID == user.chatID;
-            });
-            kitchenShift.erase(it, kitchenShift.end());
+            removeUserFromShift(user, barShift);
+            removeUserFromShift(user, kitchenShift);
 
             notifyManagerCheckout(bot, users, user, currentTime);
         }
@@ -282,7 +268,7 @@ int main() {
         sendSafeMessage(bot, user.chatID, "🕐 Please, enter your check-out time");
         awaitingCustomCheckoutInput.insert(user.chatID);
     });
-    bot.getEvents().onCommand("cancel", [&bot, &users, &blockedUsers](TgBot::Message::Ptr message) {
+    bot.getEvents().onCommand("cancel", [&bot, &users, &blockedUsers, &barShift, &kitchenShift](TgBot::Message::Ptr message) {
         if(blockedUsers.count(message->chat->id))
             return;
 
@@ -307,7 +293,11 @@ int main() {
         if(code == CANCEL_SUCCESS || code == NOTHING_TO_CANCEL)
             setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
         if(code == CANCEL_SUCCESS)
+        {
+            removeUserFromShift(user, barShift);
+            removeUserFromShift(user, kitchenShift);
             notifyManagerCancel(bot, users, user);
+        }
         logCode(user, code);
         feedbackCode(bot, user, code, time);
 
@@ -628,6 +618,7 @@ int main() {
                         sendSafeMessage(bot, users[i].chatID, "Table backup for " + currentTime.ddmmyyyy());
                         sendTableDoc(bot, users[i], getTableFilename(currentTime, BAR_TABLE), currentTime, true, false);
                         sendTableDoc(bot, users[i], getTableFilename(currentTime, KITCHEN_TABLE), currentTime, false, false);
+                        sendTableDoc(bot, users[i], "users.csv", currentTime, true, false);
                     }
                 }
                 backedUpToday = true;
@@ -637,15 +628,9 @@ int main() {
                 backedUpToday = false;
                 lastProcessedDay = currentTime.ddmmyyyy();
                 std::cout << "[INFO] New day detected: " << lastProcessedDay << " — resetting command states.\n";
-                for (User &user : users)
-                {
-                    if(user.role == MANAGER)
-                        setCommandsForUser(bot, user.chatID, COMMAND_STATE::MANAGER_COMMAND_STATE);
-                    else if(user.role == DEVELOPER)
-                        setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEVELOPER_COMMAND_STATE);
-                    else if(user.role == EMPLOYEE)
-                        setCommandsForUser(bot, user.chatID, COMMAND_STATE::DEFAULT_COMMAND_STATE);
-                }
+                resetCommandsForAllUsers(bot, users);
+                barShift.clear();
+                kitchenShift.clear();
             }
 
             // Check for new month
