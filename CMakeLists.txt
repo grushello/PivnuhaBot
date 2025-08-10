@@ -17,7 +17,9 @@ if (CURL_FOUND)
     add_definitions(-DHAVE_CURL)
 endif()
 
-add_executable(pivnuhaBot src/main.cpp src/time.cpp src/user.cpp src/telegram_handler.cpp src/table_handler.cpp src/user_handler.cpp)
+add_executable(pivnuhaBot src/main.cpp src/time.cpp src/user.cpp src/telegram_handler.cpp 
+src/table_handler.cpp src/user_handler.cpp src/initializer.cpp src/feedback.cpp src/utils.cpp 
+src/message_handler.cpp src/command_handler.cpp)
 
 target_link_libraries(pivnuhaBot 
     ${CMAKE_THREAD_LIBS_INIT} 

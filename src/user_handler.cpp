@@ -1,4 +1,7 @@
 #include "user_handler.hpp"
+#include "feedback.hpp"
+
+#include <set>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -79,4 +82,38 @@ void setShift(const std::vector<User> users, std::vector<User>& barShift, std::v
                 kitchenShift.push_back(user);
         }
     }
+}
+bool validateNewUser(TgBot::Bot& bot, const User& user, const std::vector<User>& users, const std::set<int64_t>& blockedUsers, const Time& time)
+{
+    if(blockedUsers.count(user.chatID))
+        return false;
+    if(user.chatID != 0)
+    {
+        logCode(user, MULTIPLE_REGISTRATION);
+        feedbackCode(bot, user, MULTIPLE_REGISTRATION, time);
+        return false;
+    }
+    return true;
+}
+bool validateUser(TgBot::Bot& bot, const User& user, const std::vector<User>& users, const std::set<int64_t>& blockedUsers, const Time& time)
+{
+    if(blockedUsers.count(user.chatID))
+        return false;
+    if(user.chatID == 0)
+    {
+        logCode(user, USER_NOT_FOUND);
+        feedbackCode(bot, user, USER_NOT_FOUND, time);
+        return false;
+    }
+    return true;
+}
+bool validateUserRole(TgBot::Bot& bot, const User& user, USER_ROLE requiredRole, const Time& time)
+{
+    if(user.role != requiredRole)
+    {
+        logCode(user, NO_PERMISSION);
+        feedbackCode(bot, user, NO_PERMISSION, time);
+        return false;
+    }
+    return true;
 }

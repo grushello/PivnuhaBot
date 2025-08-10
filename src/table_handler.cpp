@@ -253,10 +253,11 @@ std::pair<EXIT_CODE, Time> tableCheckout(const User& user, const Time& time)
     Time inTime = readCellTime(ws.cell(column - 1, row));
     double hours = Time::hoursDiff(time, inTime);
     
-    if(time.hour <= 8 && (inTime.hour >= 23 || inTime.hour <= 5))
-    {
-        return {EXIT_CODE::CHECKOUT_TIME_INCORRECT, Time()};
-    }
+    // It seems I was high when writing these 3 lines of code below. I live it here as a souvenir
+    // if(time.hour <= 8 && (inTime.hour >= 23 || inTime.hour <= 5))
+    // {
+    //     return {EXIT_CODE::CHECKOUT_TIME_INCORRECT, Time()};
+    // }
 
     if(hours <= 0.1)
     {
